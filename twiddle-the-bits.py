@@ -3,12 +3,13 @@ import aiohttp
 import requests
 import json
 import os
-import sys
 import logging
 import subprocess
 import config
 import re
 
+from kubernetes import client as kubeClient
+from kubernetes import config as kubeConfig
 
 def make_results_dir():
     if not os.path.isdir(config.SYFT_RESULTS_DIR):
@@ -37,8 +38,8 @@ def workstream_json_check():
     """
     Checks and validates the existence of the workstream json name supplied via command line argument.
     """
-    if len(sys.argv) > 1:
-        if os.path.exists(f"{config.WORKSTREAMS_DIR}/{sys.argv[1]}.json"):
+    if os.environ['WORKSTREAM']:
+        if os.path.exists(f"{config.WORKSTREAMS_DIR}/{os.environ['WORKSTREAM']}.json"):
             logging.info("Workstream JSON Found!")
         else:
             logging.error("Unable to find Workstream JSON.")
@@ -52,7 +53,7 @@ def define_component_list():
     """
     Opens and reads the OSD urls for each component with the supplied workstream JSON.
     """
-    json_path = os.path.join(os.getcwd(), f"{config.WORKSTREAMS_DIR}/{sys.argv[1]}.json")
+    json_path = os.path.join(os.getcwd(), f"{config.WORKSTREAMS_DIR}/{os.environ['WORKSTREAM']}.json")
     with open(json_path, "r") as json_file:
         return json.loads(json_file.read())
 
@@ -98,6 +99,17 @@ def osd_data_parser(osd_results):
                 f'The request for the deployment {components["details"]["name"].upper()} was "{components["reason"]}" in OSD. '
                 "Please check the associated workstream template and verify all OSD URLs are correct."
             )
+    
+    for dep in deployment_data:
+        print(f"Image in deployment: {dep}")
+    # remove duplicate images
+    logging.info(f"Number of images found: {len(deployment_data)}")
+    unique_images = [*set(deployment_data)]
+
+    for img in unique_images:
+        print(f"image: {img}")
+    logging.info(f"Number of unique images: {len(unique_images)}")
+
     return deployment_data
 
 
@@ -127,7 +139,8 @@ def syft_automation(deployment_data, csv_file_name, json_file_name):
         file.write('"DEPLOYMENT NAME","QUAY TAG","PACKAGE NAME","VERSION INSTALLED","DEPENDENCY TYPE"')
     for deployment in deployment_data:
         deployment_name = deployment
-        quay_url = deployment_data.get(deployment)
+        # quay_url = deployment_data.get(deployment)
+        quay_url = deployment
         if quay_url in syft_output_cache:
             logging.info(f"{deployment.upper()} uses a previously scanned image '{quay_url}', using cached results.")
             with open(csv_file_name, "ab") as file:
@@ -164,7 +177,7 @@ def grype_automation(deployment_data, csv_file_name, json_file_name):
         )
     for deployment in deployment_data:
         deployment_name = deployment
-        quay_url = deployment_data.get(deployment)
+        quay_url = deployment
         if quay_url in grype_output_cache:
             logging.info(f"{deployment.upper()} uses a previously scanned image '{quay_url}', using cached results.")
             with open(csv_file_name, "ab") as file:
@@ -242,6 +255,38 @@ def image_cleanup(quay_url):
         logging.info(f'Clean Up: Removing "{quay_url}"')
 
 
+def get_images():
+    # Configs can be set in Configuration class directly or using helper utility
+    kubeConfig.load_kube_config()
+
+    api = kubeClient.AppsV1Api()
+
+    # deployment = api.list_deployment_for_all_namespaces() # no permission to execute on crc-stage
+
+    # projects = ["host-inventory-prod", "xjoin-jenkins-prod", "xjoin-prod"]
+    projects = ["host-inventory-stage", "xjoin-jenkins-stage", "xjoin-operator-stage", "xjoin-stage"]
+
+    images = []
+
+    for p in projects:
+        deployments = api.list_namespaced_deployment(p)
+        for d in deployments.items:
+            containers = d.spec.template.spec.containers
+            for c in containers:
+                images.append(c.image)
+
+    # print(images)
+    print(f"Total number images found: {len(images)}")
+
+    # remove duplicate
+    unique_images = [*set(images)]
+    print(f"Number unique images found: {len(unique_images)}")
+    for im in images:
+        print(im)
+
+    return unique_images
+
+
 async def main():
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S", level=logging.INFO
@@ -249,19 +294,18 @@ async def main():
     osd_api_key_check()
     workstream_json_check()
     make_results_dir()
-    csv_file_name = f"{config.SYFT_RESULTS_DIR}/{sys.argv[1]}-sbom.csv"
-    json_file_name = f"{config.SYFT_RESULTS_DIR}/{sys.argv[1]}-sbom.json"
+    csv_file_name = f"{config.SYFT_RESULTS_DIR}/{config.WORKSTREAMS_DIR}-sbom.csv"
+    json_file_name = f"{config.SYFT_RESULTS_DIR}/{config.WORKSTREAMS_DIR}-sbom.json"
     create_clean_result_files(csv_file_name, json_file_name)
-    worksteam_json_data = define_component_list()
-    osd_results = await production_image_lookup(worksteam_json_data)
-    deployment_data = osd_data_parser(osd_results)
+
+    deployment_data = get_images()
     os.system("./art/syft.sh")
     syft_automation(deployment_data, csv_file_name, json_file_name)
     remove_blank_lines(csv_file_name)
     remove_blank_lines(json_file_name)
     format_json(json_file_name)
-    csv_file_name = f"{config.SYFT_RESULTS_DIR}/{sys.argv[1]}-vuln-scan.csv"
-    json_file_name = f"{config.SYFT_RESULTS_DIR}/{sys.argv[1]}-vuln-scan.json"
+    csv_file_name = f"{config.SYFT_RESULTS_DIR}/{os.environ['WORKSTREAM']}-vuln-scan.csv"
+    json_file_name = f"{config.SYFT_RESULTS_DIR}/{os.environ['WORKSTREAM']}-vuln-scan.json"
     create_clean_result_files(csv_file_name, json_file_name)
     os.system("./art/grype.sh")
     grype_automation(deployment_data, csv_file_name, json_file_name)

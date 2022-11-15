@@ -9,6 +9,7 @@ certifi = "*"
 aiohttp = "*"
 requests = "*"
 flake8 = "*"
+kubernetes = "*"
 
 [dev-packages]
 

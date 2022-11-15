@@ -1,0 +1,11 @@
+{
+    "components": [
+        {
+            "gabi-host-inventory": "https://api.crcp01ue1.o9m8.p1.openshiftapps.com:6443/apis/apps/v1/namespaces/host-inventory-prod/deployments/gabi-host-inventory",
+            "host-inventory-mq-p1": "https://api.crcp01ue1.o9m8.p1.openshiftapps.com:6443/apis/apps/v1/namespaces/host-inventory-prod/deployments/host-inventory-mq-p1",
+            "host-inventory-mq-pmin": "https://api.crcp01ue1.o9m8.p1.openshiftapps.com:6443/apis/apps/v1/namespaces/host-inventory-prod/deployments/host-inventory-mq-pmin",
+            "host-inventory-mq-sp": "https://api.crcp01ue1.o9m8.p1.openshiftapps.com:6443/apis/apps/v1/namespaces/host-inventory-prod/deployments/host-inventory-mq-sp",
+            "host-inventory-mq-service": "https://api.crcp01ue1.o9m8.p1.openshiftapps.com:6443/apis/apps/v1/namespaces/host-inventory-prod/deployments/host-inventory-service"
+        }
+    ]
+}

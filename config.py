@@ -5,4 +5,5 @@ WORKSTREAMS_DIR = "workstreams"
 TEMPLATES_DIR = "templates"
 CONTAINER_ENGINE = "docker"
 OSD_API_KEY = os.environ['OSD_API_KEY']
-PROD_OSD_API_URL = "https://api.crcp01ue1.o9m8.p1.openshiftapps.com:6443/"
+WORKSTREAM = os.environ['WORKSTREAM']
+PROD_OSD_API_URL = "https://api.crcs02ue1.urby.p1.openshiftapps.com:6443/"
