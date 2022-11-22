@@ -1,12 +1,13 @@
 import asyncio
 import aiohttp
-import requests
 import json
 import os
 import logging
 import subprocess
 import config
 import re
+
+import openshift as oc
 
 from kubernetes import client as kubeClient
 from kubernetes import config as kubeConfig
@@ -15,23 +16,6 @@ def make_results_dir():
     if not os.path.isdir(config.SYFT_RESULTS_DIR):
         logging.info(f'Creating the "{config.SYFT_RESULTS_DIR}" directory')
         os.makedirs(config.SYFT_RESULTS_DIR)
-
-
-def osd_api_key_check():
-    """
-    Checks and validates OSD API Key that is supplied as an environment variable.
-    """
-    if config.OSD_API_KEY:
-        headers = {"Authorization": f"Bearer {config.OSD_API_KEY}"}
-        r = requests.get(config.PROD_OSD_API_URL, headers=headers)
-        if r.status_code == 200:
-            logging.info("OSD Prod Authentication Successful!")
-        else:
-            logging.error('OSD Prod Authentication was unsuccessful, please verify your "OSD API KEY" is valid.')
-            quit()
-    else:
-        logging.error('Job Failed to start. You must supply an "OSD_API_KEY" as environment variable.')
-        quit()
 
 
 def workstream_json_check():
@@ -150,7 +134,7 @@ def syft_automation(deployment_data, csv_file_name, json_file_name):
                 file.write(syft_output_cache[quay_url]["json"])
         else:
             logging.info(f"Syfting through [{deployment.upper()} - {quay_url}]")
-            command = f"syft {quay_url} -o template -t {config.TEMPLATES_DIR}/syft_csv_and_json.tmpl"
+            command = f"syft {quay_url} --scope all-layers -o template -t {config.TEMPLATES_DIR}/syft_csv_and_json.tmpl"
             process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
             output, _ = process.communicate()
             csv_output = output.split(b"===SYFT_TEMPLATE_SEPARATOR===")[0]
@@ -173,7 +157,7 @@ def grype_automation(deployment_data, csv_file_name, json_file_name):
     grype_output_cache = {}
     with open(csv_file_name, "w") as file:
         file.write(
-            '"DEPLOYMENT NAME","QUAY TAG","VULNERABILITY ID","DATA SOURCE","VULNERABILITY SEVERITY","PACKAGE NAME","VERSION INSTALLED","FIXED VERSIONS","FIXED STATE"'
+            '"DEPLOYMENT NAME","QUAY TAG","VULNERABILITY ID","DATA SOURCE","VULNERABILITY SEVERITY","PACKAGE NAME","VERSION INSTALLED","FIXED VERSIONS","FIXED STATE""'
         )
     for deployment in deployment_data:
         deployment_name = deployment
@@ -187,7 +171,7 @@ def grype_automation(deployment_data, csv_file_name, json_file_name):
                 file.write(grype_output_cache[quay_url]["json"])
         else:
             logging.info(f"Looking at [{deployment.upper()} - {quay_url}] for vulnerabilities to grype about.")
-            command = f"grype {quay_url} -o template -t {config.TEMPLATES_DIR}/grype_csv_and_json.tmpl"
+            command = f"grype {quay_url} --scope all-layers -o template -t {config.TEMPLATES_DIR}/grype_csv_and_json.tmpl"
             process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
             output, _ = process.communicate()
             csv_output = output.split(b"===GRYPE_TEMPLATE_SEPARATOR===")[0]
@@ -198,7 +182,7 @@ def grype_automation(deployment_data, csv_file_name, json_file_name):
             add_osd_metadata(deployment_name, quay_url, csv_file_name)
             with open(json_file_name, "ab") as file:
                 file.write(json_output)
-        add_osd_metadata(deployment_name, quay_url, json_file_name)
+            add_osd_metadata(deployment_name, quay_url, json_file_name)
         image_cleanup(quay_url)
 
 
@@ -213,7 +197,6 @@ def add_osd_metadata(deployment_name, quay_url, file_name):
     filedata = filedata.replace("QUAY_TAG_PLACEHOLDER", quay_url)
     with open(file_name, "w") as file:
         file.write(filedata)
-
 
 def remove_blank_lines(file_name):
     """
@@ -255,34 +238,47 @@ def image_cleanup(quay_url):
         logging.info(f'Clean Up: Removing "{quay_url}"')
 
 
-def get_images():
+def get_namespaces():
+    """
+    Checks cluster connection and resources avaialability.
+    """
+    try:
+        projects = oc.selector("projects")
+        oc_projects = [project.name() for project in projects]
+        logging.info(f"Found {len(oc_projects)} projects/namespaces")
+        for p in oc_projects:
+            logging.info(f"Project: {p}")
+
+        return oc_projects
+    except Exception as e:
+        logging.error("Job Failed to start. Can not connect to Kubernetes cluster resources.")
+        logging.error(f"Problem: {e.msg}")
+        quit()
+
+
+# TODO: See if "oc" can be used to get deployments using a project name
+def get_images(namespaces):
+    # TODO: See if "oc" can be used to get deployments using a project name
     # Configs can be set in Configuration class directly or using helper utility
     kubeConfig.load_kube_config()
-
     api = kubeClient.AppsV1Api()
-
-    # deployment = api.list_deployment_for_all_namespaces() # no permission to execute on crc-stage
-
-    # projects = ["host-inventory-prod", "xjoin-jenkins-prod", "xjoin-prod"]
-    projects = ["host-inventory-stage", "xjoin-jenkins-stage", "xjoin-operator-stage", "xjoin-stage"]
 
     images = []
 
-    for p in projects:
-        deployments = api.list_namespaced_deployment(p)
+    for ns in namespaces:
+        deployments = api.list_namespaced_deployment(ns)
         for d in deployments.items:
             containers = d.spec.template.spec.containers
             for c in containers:
                 images.append(c.image)
 
-    # print(images)
-    print(f"Total number images found: {len(images)}")
+    logging.info(f"Total number images found: {len(images)}")
 
     # remove duplicate
     unique_images = [*set(images)]
-    print(f"Number unique images found: {len(unique_images)}")
+    logging.info(f"Number unique images found: {len(unique_images)}")
     for im in images:
-        print(im)
+        logging.info(im)
 
     return unique_images
 
@@ -291,16 +287,19 @@ async def main():
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S", level=logging.INFO
     )
-    osd_api_key_check()
+
+    # TODO: Do we have to use workstreams?  Try getting access to all essentials and advisor services.
     workstream_json_check()
     make_results_dir()
     csv_file_name = f"{config.SYFT_RESULTS_DIR}/{config.WORKSTREAMS_DIR}-sbom.csv"
     json_file_name = f"{config.SYFT_RESULTS_DIR}/{config.WORKSTREAMS_DIR}-sbom.json"
     create_clean_result_files(csv_file_name, json_file_name)
 
-    deployment_data = get_images()
+    namespaces = get_namespaces()
+    images = get_images(namespaces)
+    # images = ["quay.io/cloudservices/insights-inventory:60f08b7"]
     os.system("./art/syft.sh")
-    syft_automation(deployment_data, csv_file_name, json_file_name)
+    syft_automation(images, csv_file_name, json_file_name)
     remove_blank_lines(csv_file_name)
     remove_blank_lines(json_file_name)
     format_json(json_file_name)
@@ -308,7 +307,7 @@ async def main():
     json_file_name = f"{config.SYFT_RESULTS_DIR}/{os.environ['WORKSTREAM']}-vuln-scan.json"
     create_clean_result_files(csv_file_name, json_file_name)
     os.system("./art/grype.sh")
-    grype_automation(deployment_data, csv_file_name, json_file_name)
+    grype_automation(images, csv_file_name, json_file_name)
     remove_blank_lines(csv_file_name)
     remove_blank_lines(json_file_name)
     format_json(json_file_name)
