@@ -9,8 +9,10 @@ import re
 
 import openshift as oc
 
+from cve_sifter import CVESifter
 from kubernetes import client as kubeClient
 from kubernetes import config as kubeConfig
+
 
 def make_results_dir():
     if not os.path.isdir(config.SYFT_RESULTS_DIR):
@@ -311,6 +313,16 @@ async def main():
     remove_blank_lines(csv_file_name)
     remove_blank_lines(json_file_name)
     format_json(json_file_name)
+
+    sifter = CVESifter(json_file_name)
+
+    fixed, not_fixed, wont_fix, unknown = sifter.sift_cves()
+
+    logging.info(f"Fixed: {len(fixed)}")
+    logging.info(f"Not-fixed: {len(not_fixed)}")
+    logging.info(f"Wont-fix: {len(wont_fix)}")
+    logging.info(f"Unkown: {len(unknown)}")
+    
 
 
 if __name__ == "__main__":
