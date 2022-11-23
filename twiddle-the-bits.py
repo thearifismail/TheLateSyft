@@ -114,7 +114,7 @@ def clean_json(json_like):
     return trailing_array_commas_re.sub("]", objects_fixed)
 
 
-def syft_automation(deployment_data, csv_file_name, json_file_name):
+def syft_automation(images, csv_file_name, json_file_name):
     """
     Uses the deployment data collected from OSD and uses Syft to scan the identified images.
     Additionally, if any deployment uses a previously scanned image, it will use the cached
@@ -123,19 +123,19 @@ def syft_automation(deployment_data, csv_file_name, json_file_name):
     syft_output_cache = {}
     with open(csv_file_name, "w") as file:
         file.write('"DEPLOYMENT NAME","QUAY TAG","PACKAGE NAME","VERSION INSTALLED","DEPENDENCY TYPE"')
-    for deployment in deployment_data:
-        deployment_name = deployment
+    for img in images:
+        deployment_name = img
         # quay_url = deployment_data.get(deployment)
-        quay_url = deployment
+        quay_url = img
         if quay_url in syft_output_cache:
-            logging.info(f"{deployment.upper()} uses a previously scanned image '{quay_url}', using cached results.")
+            logging.info(f"{img.upper()} uses a previously scanned image '{quay_url}', using cached results.")
             with open(csv_file_name, "ab") as file:
                 file.write(syft_output_cache[quay_url]["csv"])
             add_osd_metadata(deployment_name, quay_url, csv_file_name)
             with open(json_file_name, "ab") as file:
                 file.write(syft_output_cache[quay_url]["json"])
         else:
-            logging.info(f"Syfting through [{deployment.upper()} - {quay_url}]")
+            logging.info(f"Syfting through [{img.upper()} - {quay_url}]")
             command = f"syft {quay_url} --scope all-layers -o template -t {config.TEMPLATES_DIR}/syft_csv_and_json.tmpl"
             process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
             output, _ = process.communicate()
@@ -195,8 +195,8 @@ def add_osd_metadata(deployment_name, quay_url, file_name):
     """
     with open(file_name, "r") as file:
         filedata = file.read()
-    filedata = filedata.replace("DEPLOYMENT_NAME_PLACEHOLDER", deployment_name)
-    filedata = filedata.replace("QUAY_TAG_PLACEHOLDER", quay_url)
+    filedata = filedata.replace("DEPLOYMENT_NAME_PLACEHOLDER", deployment_name.split(":")[0])
+    filedata = filedata.replace("QUAY_TAG_PLACEHOLDER", quay_url.split(":")[1])
     with open(file_name, "w") as file:
         file.write(filedata)
 
@@ -258,7 +258,9 @@ def get_namespaces():
         quit()
 
 
-# TODO: See if "oc" can be used to get deployments using a project name
+# TODO: 
+#   1.  Change get_images to return dictionary with deployment name and the imgae IF NEEDED.
+#   2.  See if "oc" can be used to get deployments using a project name.split(":")[0]
 def get_images(namespaces):
     # TODO: See if "oc" can be used to get deployments using a project name
     # Configs can be set in Configuration class directly or using helper utility
@@ -323,7 +325,21 @@ async def main():
     logging.info(f"Wont-fix: {len(wont_fix)}")
     logging.info(f"Unkown: {len(unknown)}")
     
+    # get JIRA issues
+    import jira_client
+    with open("results/security.log", "w") as fo:
+        jira_config = jira_client.checkConfig()
+        boards = jira_config['boards'].split(', ')
+        issue_number = 0
+        for jira_project in boards:
+            issues = jira_client.list_issues(jira_project)
+            fo.write(f"\n\nNumber of issues found in {jira_project}: {len(issues)}\n")
+            for i in issues:
+                issue_number += 1
+                print(f"\nIssue {issue_number}.  {i}: {i.fields.summary}")
+                fo.write(f"\n{i.fields.summary}")
 
+    logging.info("Done!")
 
 if __name__ == "__main__":
     asyncio.run(main())

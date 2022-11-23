@@ -37,3 +37,13 @@ MRs welcome
 
 ## Authors and acknowledgment
 Dr. Brantley (dr.brantley@redhat.com), Casey Williams (caswilli@redhat.com, Kent Aycoth (kaycoth@redhat.com)
+
+# Host Inventory Grype
+Host inventory Syft/Grype (HISG) is built using TheLateSyft from Dr. Brantly, Casey Williams, and Kent Aycoth.  For Getting JIRA cards, it used Jira Nanny from Ashley Young
+
+HISG does not use workstreams from TheLateSyft.  It insteads looks at the projects/namespaces the user(account) as access to.  It then looks at all deployments and the images used by them.
+It then syft and grype the images found.  
+From JIRA, it gets the JIRA cards created against the Essentials project.
+
+Next.  Get CVEs provided and search for them in JIRA cards
+Based on the fix states in Grype report, set JIRA cards status.
