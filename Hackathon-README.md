@@ -1,15 +1,4 @@
-# Host Inventory Grype
-Host inventory Syft/Grype (HISG) is built using TheLateSyft from Dr. Brantly, Casey Williams, and Kent Aycoth.  For Getting JIRA cards, it uses Jira Nanny from Ashley Young
-
-HISG does not use workstreams from TheLateSyft.  It, insteads, looks at the cluster a user is connected to, query for  projects/namespaces the user(account) has access to, and then at the deployments and images.  It then syfts and grypes the images found.  As of now, the vulnerability data is divided into four files based on fixed states, which are "fixed", "not-fixed", "wont-fix", and "unknown"
-
-## Next To Do based on decisions made by the group.
-Use data from Grype to update JIRA cards.
-How to Fix images?
-Adding this to PR Checks?
-
-
-# The Late Syft (Hackathon by Brantely, Casey, and Kent)
+# The Late Syft
 The Late Syft is a new open-source service that transitions existing SBoM(Software Build of Materials) functionality into a new "security as a service" open-source service. This will enable teams to see each individual build layer which will give the most accurate view of a container and its components. This ensures updated, automated and fresh copies on a regular basis and produces a more granular list of components/packages that are currently being monitored.
 
 ## Dependencies
@@ -49,3 +38,12 @@ MRs welcome
 ## Authors and acknowledgment
 Dr. Brantley (dr.brantley@redhat.com), Casey Williams (caswilli@redhat.com, Kent Aycoth (kaycoth@redhat.com)
 
+# Host Inventory Grype
+Host inventory Syft/Grype (HISG) is built using TheLateSyft from Dr. Brantly, Casey Williams, and Kent Aycoth.  For Getting JIRA cards, it uses Jira Nanny from Ashley Young
+
+HISG does not use workstreams from TheLateSyft.  It insteads looks at the projects/namespaces the user(account) as access to.  It then looks at all deployments and the images used by them.
+It then syft and grype the images found.  
+From JIRA, it gets the JIRA cards created against the Essentials project.
+
+Next.  Get CVEs provided and search for them in JIRA cards
+Based on the fix states in Grype report, set JIRA cards status.

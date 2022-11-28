@@ -240,6 +240,7 @@ def image_cleanup(quay_url):
         logging.info(f'Clean Up: Removing "{quay_url}"')
 
 
+# use OpenShift client for getting all projects/namespaces the user has access to
 def get_namespaces():
     """
     Checks cluster connection and resources avaialability.
@@ -259,8 +260,9 @@ def get_namespaces():
 
 
 # TODO: 
-#   1.  Change get_images to return dictionary with deployment name and the imgae IF NEEDED.
-#   2.  See if "oc" can be used to get deployments using a project name.split(":")[0]
+#   Using "kube_conifig" to get to deployments.  
+#   Question: How to get to deployments in OC project?
+#   Is there a "selctor" available within in a project to get to the deployments in it. 
 def get_images(namespaces):
     # TODO: See if "oc" can be used to get deployments using a project name
     # Configs can be set in Configuration class directly or using helper utility
@@ -284,6 +286,7 @@ def get_images(namespaces):
     for im in images:
         logging.info(im)
 
+    # TODO: Log images and their  parent namespaces to a log file
     return unique_images
 
 
@@ -292,7 +295,7 @@ async def main():
         format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S", level=logging.INFO
     )
 
-    # TODO: Do we have to use workstreams?  Try getting access to all essentials and advisor services.
+    # workstreams are not needed anymore.  For now leaving it in here because it created CSV and JSON files.
     workstream_json_check()
     make_results_dir()
     csv_file_name = f"{config.SYFT_RESULTS_DIR}/{config.WORKSTREAMS_DIR}-sbom.csv"
@@ -301,7 +304,7 @@ async def main():
 
     namespaces = get_namespaces()
     images = get_images(namespaces)
-    # images = ["quay.io/cloudservices/insights-inventory:60f08b7"]
+
     os.system("./art/syft.sh")
     syft_automation(images, csv_file_name, json_file_name)
     remove_blank_lines(csv_file_name)
@@ -316,16 +319,18 @@ async def main():
     remove_blank_lines(json_file_name)
     format_json(json_file_name)
 
-    sifter = CVESifter(json_file_name)
+    sifter = CVESifter(json_file_name, config.SYFT_RESULTS_DIR)
 
-    fixed, not_fixed, wont_fix, unknown = sifter.sift_cves()
+    total, fixed, not_fixed, wont_fix, unknown = sifter.sift_cves()
 
+    logging.info(f"Total vulnerabilities: {total}")
     logging.info(f"Fixed: {len(fixed)}")
     logging.info(f"Not-fixed: {len(not_fixed)}")
     logging.info(f"Wont-fix: {len(wont_fix)}")
     logging.info(f"Unkown: {len(unknown)}")
-    
-    # get JIRA issues
+
+    # This JIRA seciton should be handled by JIRA Nanny.  
+    # Added it here while thinking about dealing with JIRA cards
     import jira_client
     with open("results/security.log", "w") as fo:
         jira_config = jira_client.checkConfig()
@@ -336,7 +341,7 @@ async def main():
             fo.write(f"\n\nNumber of issues found in {jira_project}: {len(issues)}\n")
             for i in issues:
                 issue_number += 1
-                print(f"\nIssue {issue_number}.  {i}: {i.fields.summary}")
+                print(f"Issue {issue_number}.  {i}: {i.fields.summary}")
                 fo.write(f"\n{i.fields.summary}")
 
     logging.info("Done!")
