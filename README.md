@@ -8,6 +8,9 @@ Use data from Grype to update JIRA cards.
 How to Fix images?
 Adding this to PR Checks?
 
+Unknown coming from nvd.nist.gov.  Question: When will they move out of unknown states or what do we do with it
+Jira cards: split vuln in image or code base (front end)
+
 
 # The Late Syft (Hackathon by Brantely, Casey, and Kent)
 The Late Syft is a new open-source service that transitions existing SBoM(Software Build of Materials) functionality into a new "security as a service" open-source service. This will enable teams to see each individual build layer which will give the most accurate view of a container and its components. This ensures updated, automated and fresh copies on a regular basis and produces a more granular list of components/packages that are currently being monitored.

@@ -287,6 +287,12 @@ def get_images(namespaces):
         logging.info(im)
 
     # TODO: Log images and their  parent namespaces to a log file
+    with open("results/unique_images.log", "w") as of:
+        of.write(f"Number of unique images found: {len(unique_images)}")
+        i = 0
+        for im in unique_images:
+            i += 1
+            of.write(f"\n{i}.  {im}")
     return unique_images
 
 
